@@ -1,23 +1,22 @@
 from collections import deque
 import pandas
+from typing import AnyStr, Optional
 
-from limit_order_book.base import (
-    BaseLimitOrderBook,
+from .limit_order_book import BaseLimitOrderBook
+from .order import (
     LimitOrder,
     MatchedOrder,
     Direction
 )
 
-from typing import AnyStr, Optional
-
 
 class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
     """A flat linear array implementation of a limit order book.
 
-    This implementation of a limit order book relies on i) a double-ended
-    queue at each price and ii) a dictionary to lookup limit orders from a
-    given order identifier and is inspired by the Voyager submission to the
-    QuantCup, see below references.
+    This implementation of a limit order book relies on i) an array of
+    double-ended queue at each price and ii) a dictionary to lookup limit
+    orders from a given order identifier and is inspired by the Voyager
+    submission to the QuantCup, see below references.
 
     The attributes `bid_max` and `ask_min` maintain the starting point for any
     search to match orders. The value of `bid_max` corresponds to the maximum
@@ -117,7 +116,6 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
                         if entry.quantity > quantity:
                             # Amend existing order in order book
                             entry.quantity -= quantity
-                            quantity = 0
                         else:
                             # Remove existing order from order book
                             entries.popleft()
