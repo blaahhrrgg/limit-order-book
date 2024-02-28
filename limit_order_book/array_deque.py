@@ -50,6 +50,7 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
         if limit_order.direction == Direction.Buy:
             # Look for outstanding sell orders that cross with the buy order
             while limit_order.price >= self.ask_min:
+
                 # Iterate through limit orders at current ask min
                 entries = self.price_queues[self.ask_min]
 

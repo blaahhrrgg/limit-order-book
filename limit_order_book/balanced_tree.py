@@ -1,4 +1,3 @@
-import bintrees
 from bintrees import FastAVLTree
 import pandas
 from typing import AnyStr

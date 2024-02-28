@@ -134,7 +134,6 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
 
                     else:
                         # Existing limit order is larger than current order
-
                         if entry.quantity > limit_order.quantity:
                             # Amend existing order in order book
                             entry.quantity -= limit_order.quantity
