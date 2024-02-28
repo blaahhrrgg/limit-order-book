@@ -1,0 +1,41 @@
+[tool.poetry]
+name = "limit-order-book"
+version = "0.0.1"
+description = "Tookkit for benchmarking limit order book implementations."
+homepage = "https://github.com/blaahhrrgg/limit-order-book"
+repository = "https://github.com/blaahhrrgg/limit-order-book"
+readme = "README.md"
+authors = []
+
+[tool.poetry.dependencies]
+python = "3.11.5"
+black = "^23.12.1"
+numpy = "^1.24.3"
+pandas = "^2.0.3"
+pyarrow = "15.0.0"
+rich = "13.0.0"
+bintrees = "2.2.0"
+
+[tool.coverage.run]
+omit = [".*", "*/site-packages/*", "*/__init__.py", "*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 0
+
+[tool.semantic_release]
+version_variable = [
+    "pyproject.toml:version"
+]
+
+branch = "main"
+changelog_file = "CHANGELOG.md"
+build_command = "poetry build"
+upload_to_release = false
+upload_to_pypi = false
+remove_dist = false
+patch_without_tag = false
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
