@@ -1,3 +1,4 @@
+import bintrees
 from bintrees import FastAVLTree
 import pandas
 from typing import AnyStr
@@ -34,8 +35,11 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
 
         if limit_order.price not in book:
             # Create deque with limit order
-            book.insert(limit_order.price, PriceDeque(
-                [limit_order], price=limit_order.price))
+            book.insert(
+                limit_order.price,
+                PriceDeque(price=limit_order.price, iterable=[limit_order])
+            )
+
         else:
             # Append limit order to existing deque
             book.get_value(limit_order.price).append(limit_order)
