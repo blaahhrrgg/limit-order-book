@@ -1,7 +1,7 @@
-from collections import deque, defaultdict
 import pandas
 from typing import AnyStr
 
+from .price_deque import PriceDeque
 from .limit_order_book import BaseLimitOrderBook
 from .order import (
     LimitOrder,
@@ -23,11 +23,14 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
         self.bid_max = 0
         self.ask_min = max_price + 1
         self.orders = dict()
-        self.price_queues = defaultdict(deque)
+        self.price_queues = dict()
 
     def _add_order_to_queue(self, limit_order: LimitOrder) -> None:
         self.orders[limit_order.id] = limit_order
-        self.price_queues[limit_order.price].append(limit_order)
+        # self.price_queues[limit_order.price].append(limit_order)
+
+        self.price_queues.setdefault(limit_order.price, PriceDeque(
+            price=limit_order.price)).append(limit_order)
 
     def add(self, limit_order: LimitOrder) -> None:
         """Add an order to the limit order book
@@ -42,7 +45,9 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
             # Look for outstanding sell orders that cross with the buy order
             while limit_order.price >= self.ask_min:
                 # Iterate through limit orders at current ask min
-                entries = self.price_queues[self.ask_min]
+                entries = self.price_queues.get(
+                    self.ask_min, PriceDeque(price=self.ask_min)
+                )
 
                 while entries:
                     entry = entries[0]
@@ -102,8 +107,11 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
         else:
             # Sell order
             while limit_order.price <= self.bid_max:
+
                 # Look for existing sell orders to cross with the buy order
-                entries = self.price_queues[self.bid_max]
+                entries = self.price_queues.get(
+                    self.bid_max, PriceDeque(price=self.bid_max)
+                )
 
                 while entries:
                     entry = entries[0]
@@ -221,14 +229,7 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
 
             # If non-empty, append
             if current_level in self.price_queues.keys():
-                data.append({
-                    "Price": current_level,
-                    "Quantity": sum([
-                        order.quantity
-                        for order in self.price_queues[current_level]
-                    ]),
-                    "NumOrders": len(self.price_queues[current_level])
-                })
+                data.append(self.price_queues[current_level].as_dict())
 
             # Go to next level
             current_level -= 1
@@ -254,14 +255,7 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
         while len(data) < levels and current_level < self.max_price:
 
             if current_level in self.price_queues.keys():
-                data.append({
-                    "Price": current_level,
-                    "Quantity": sum([
-                        order.quantity
-                        for order in self.price_queues[current_level]
-                    ]),
-                    "NumOrders": len(self.price_queues[current_level])
-                })
+                data.append(self.price_queues[current_level].as_dict())
 
             # Go to next level
             current_level += 1
