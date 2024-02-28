@@ -2,7 +2,7 @@ import dataclasses
 import enum
 import uuid
 
-from typing import AnyStr, Dict
+from typing import AnyStr, Dict, Optional, Union
 
 
 class Direction(enum.Enum):
@@ -16,11 +16,10 @@ class LimitOrder:
     price: int
     quantity: int
     direction: Direction
-    _id: uuid.uuid4 = dataclasses.field(default_factory=uuid.uuid4)
+    id: Optional[Union[int, AnyStr]] = None
 
-    @property
-    def id(self) -> AnyStr:
-        return self._id.hex
+    def __post_init__(self):
+        self.id = uuid.uuid4().hex if self.id is None else self.id
 
     @property
     def as_dict(self) -> Dict:
@@ -41,20 +40,19 @@ class MatchedOrder:
     sell_trader_id: int
     price: int
     quantity: int
-    _id: uuid.uuid4 = dataclasses.field(default_factory=uuid.uuid4)
+    id: Optional[Union[int, AnyStr]] = None
 
-    @property
-    def id(self) -> AnyStr:
-        return self._id.hex
+    def __post_init__(self):
+        self.id = uuid.uuid4().hex if self.id is None else self.id
 
     @property
     def as_dict(self) -> Dict:
         return {
-            "id": self.id,
-            "buy_trader_id": self.buy_trader_id,
-            "sell_trader_id": self.sell_trader_id,
-            "quantity": self.quantity,
-            "price": self.price,
+            "Id": self.id,
+            "BuyTraderId": self.buy_trader_id,
+            "SellTraderId": self.sell_trader_id,
+            "Quantity": self.quantity,
+            "Price": self.price,
         }
 
     def __eq__(self, other):

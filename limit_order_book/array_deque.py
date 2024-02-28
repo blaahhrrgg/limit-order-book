@@ -1,7 +1,7 @@
-from collections import deque
 import pandas
-from typing import AnyStr, Optional
+from typing import AnyStr
 
+from .price_deque import PriceDeque
 from .limit_order_book import BaseLimitOrderBook
 from .order import (
     LimitOrder,
@@ -48,79 +48,68 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
         self.bid_max = 0
         self.ask_min = max_price + 1
         self.orders = dict()
-        self.price_queues = [deque() for _ in range(self.max_price)]
+        self.price_queues = [
+            PriceDeque(iterable=[], price=price)
+            for price in range(self.max_price)
+        ]
 
     def _add_order_to_queue(self, limit_order: LimitOrder) -> None:
         self.orders[limit_order.id] = limit_order
         self.price_queues[limit_order.price].append(limit_order)
 
-    def add(
-            self, trader_id: int, direction: Direction, quantity: int,
-            price: int
-    ) -> Optional[LimitOrder]:
+    def add(self, limit_order: LimitOrder) -> None:
         """Add an order to the limit order book
 
         Parameters
         ----------
-        trader_id: int
-            The identifier of the trader who sent the order
-        direction: Direction
-            The direction of the order
-        quantity: int
-            The quantity to buy or sell in the order
-        price: int
-            The price of the limit order
-
-        Returns
-        -------
-        LimitOrder
-            A limit order object with an identifier of the limit order.
+        limit_order: LimitOrder
+            The limit order to add to the book
         """
 
-        if direction == Direction.Buy:
+        if limit_order.direction == Direction.Buy:
             # Look for outstanding sell orders that cross with the buy order
-            while price >= self.ask_min:
+            while limit_order.price >= self.ask_min:
                 # Iterate through limit orders at current ask min
                 entries = self.price_queues[self.ask_min]
 
                 while entries:
                     entry = entries[0]
 
-                    if entry.quantity < quantity:
+                    if entry.quantity < limit_order.quantity:
                         # Current limit order is larger than best ask order
-                        quantity -= entry.quantity
+                        limit_order.quantity -= entry.quantity
 
                         # Remove existing order from book
                         entries.popleft()
 
                         self.execute(
                             MatchedOrder(
-                                buy_trader_id=trader_id,
+                                buy_trader_id=limit_order.trader_id,
                                 sell_trader_id=entry.trader_id,
                                 quantity=entry.quantity,
-                                price=price,
+                                price=entry.price,
                             )
                         )
 
                     else:
-                        self.execute(
-                            MatchedOrder(
-                                buy_trader_id=trader_id,
-                                sell_trader_id=entry.trader_id,
-                                quantity=quantity,
-                                price=price,
-                            )
-                        )
-
                         # Existing limit order is larger than current order
-                        if entry.quantity > quantity:
+                        if entry.quantity > limit_order.quantity:
                             # Amend existing order in order book
-                            entry.quantity -= quantity
+                            entry.quantity -= limit_order.quantity
                         else:
                             # Remove existing order from order book
                             entries.popleft()
 
-                        # Order completely matched, no limit order to return
+                        self.execute(
+                            MatchedOrder(
+                                buy_trader_id=limit_order.trader_id,
+                                sell_trader_id=entry.trader_id,
+                                quantity=limit_order.quantity,
+                                price=limit_order.price,
+                            )
+                        )
+
+                        # Order completely matched, done
                         return None
 
                 # Exhausted all orders at the current price level, move to
@@ -129,33 +118,27 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
 
             # If we get here, then there is some quantity we cannot fill,
             # so we enqueue the order in the limit order book
-            limit_order = LimitOrder(
-                trader_id=trader_id,
-                direction=direction,
-                quantity=quantity,
-                price=price,
-            )
-
             self._add_order_to_queue(limit_order)
 
             # Update bid max
-            if self.bid_max < price:
-                self.bid_max = price
+            if self.bid_max < limit_order.price:
+                self.bid_max = limit_order.price
 
-            return limit_order
+            # Done
+            return None
 
         else:
             # Sell order
-            while price <= self.bid_max:
+            while limit_order.price <= self.bid_max:
                 # Look for existing sell orders to cross with the buy order
                 entries = self.price_queues[self.bid_max]
 
                 while entries:
                     entry = entries[0]
 
-                    if entry.quantity < quantity:
+                    if entry.quantity < limit_order.quantity:
                         # Current limit order is larger than best bid order
-                        quantity -= entry.quantity
+                        limit_order.quantity -= entry.quantity
 
                         # Remove existing order from book
                         entries.popleft()
@@ -163,7 +146,7 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
                         self.execute(
                             MatchedOrder(
                                 buy_trader_id=entry.trader_id,
-                                sell_trader_id=trader_id,
+                                sell_trader_id=limit_order.trader_id,
                                 quantity=entry.quantity,
                                 price=entry.price,
                             )
@@ -171,10 +154,9 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
 
                     else:
                         # Existing limit order is larger than current order
-
-                        if entry.quantity > quantity:
+                        if entry.quantity > limit_order.quantity:
                             # Amend existing order in order book
-                            entry.quantity -= quantity
+                            entry.quantity -= limit_order.quantity
                         else:
                             # Remove existing order from order book
                             entries.popleft()
@@ -182,13 +164,13 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
                         self.execute(
                             MatchedOrder(
                                 buy_trader_id=entry.trader_id,
-                                sell_trader_id=trader_id,
-                                quantity=entry.quantity,
-                                price=entry.price,
+                                sell_trader_id=limit_order.trader_id,
+                                quantity=limit_order.quantity,
+                                price=limit_order.price,
                             )
                         )
 
-                        # Order completely matched, no limit order to return
+                        # Order completely matched, done
                         return None
 
                 # Exhausted all orders at the current price level, move
@@ -197,20 +179,14 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
 
             # If we get here, then there is some quantity we cannot fill,
             # so we enqueue the order in the limit order book
-            limit_order = LimitOrder(
-                trader_id=trader_id,
-                direction=direction,
-                quantity=quantity,
-                price=price,
-            )
-
             self._add_order_to_queue(limit_order)
 
             # Update ask min
-            if self.ask_min > price:
-                self.ask_min = price
+            if self.ask_min > limit_order.price:
+                self.ask_min = limit_order.price
 
-            return limit_order
+            # Done
+            return None
 
     def cancel(self, order_id: AnyStr) -> None:
         """Cancel limit order with the given order identifier
@@ -265,15 +241,19 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
         pandas.DataFrame
             A pandas DataFrame summary of bids at the top of the book.
         """
-        return pandas.DataFrame([
-            {
-                "Price": price,
-                "Quantity": sum([order.quantity for order in
-                                 self.price_queues[price]]),
-                "NumOrders": len(self.price_queues[price]),
-            }
-            for price in range(self.bid_max, self.bid_max - levels, -1)
-        ])
+        current_level = self.best_bid
+        data = []
+
+        while len(data) < levels and current_level > 0:
+
+            # If non-empty, append
+            if len(self.price_queues[current_level]) != 0:
+                data.append(self.price_queues[current_level].as_dict())
+
+            # Go to next level
+            current_level -= 1
+
+        return pandas.DataFrame(data)
 
     def get_top_asks_as_dataframe(self, levels=10) -> pandas.DataFrame:
         """Get a DataFrame summary of top asks in the order book.
@@ -288,14 +268,16 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
         pandas.DataFrame
             A pandas.DataFrame summary of asks at the top of the book.
         """
+        current_level = self.best_ask
+        data = []
 
-        return pandas.DataFrame([
-            {
-                "Price": price,
-                "Quantity": sum([order.quantity for order in
-                                 self.price_queues[price]]),
-                "NumOrders": len(self.price_queues[price]),
-            }
-            for price in range(self.ask_min, self.ask_min + levels)
-        ])
+        while len(data) < levels and current_level < self.max_price:
 
+            # If non-empty, append
+            if len(self.price_queues[current_level]) != 0:
+                data.append(self.price_queues[current_level].as_dict())
+
+            # Go to next level
+            current_level += 1
+
+        return pandas.DataFrame(data)

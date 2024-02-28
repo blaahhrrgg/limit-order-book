@@ -1,11 +1,11 @@
 import abc
 import pandas
-from typing import AnyStr, Optional, List
+from typing import AnyStr, List
 
 from rich.panel import Panel
 from rich.layout import Layout
 
-from .order import LimitOrder, MatchedOrder, Direction
+from .order import LimitOrder, MatchedOrder
 from .rich import df_to_rich_table, repr_rich
 
 
@@ -31,9 +31,7 @@ class BaseLimitOrderBook(abc.ABC):
         self._matches: List[MatchedOrder] = []
 
     @abc.abstractmethod
-    def add(
-        self, trader_id: int, direction: Direction, quantity: int, price: int
-    ) -> Optional[LimitOrder]:
+    def add(self, limit_order: LimitOrder) -> None:
         """Add a limit order to the limit order book."""
         raise NotImplementedError
 
