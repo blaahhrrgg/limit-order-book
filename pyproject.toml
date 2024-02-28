@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "limit-order-book"
 version = "0.0.1"
-description = "Tookkit for benchmarking limit order book implementations."
+description = "Various implementations of a limit order book for benchmarking."
 homepage = "https://github.com/blaahhrrgg/limit-order-book"
 repository = "https://github.com/blaahhrrgg/limit-order-book"
 readme = "README.md"
