@@ -1,10 +1,10 @@
-from collections import deque
 from bintrees import FastAVLTree
 import pandas
-from typing import AnyStr, Optional
+from typing import AnyStr
 
-from .limit_order_book import BaseLimitOrderBook
-from .order import (
+from .base import (
+    BaseLimitOrderBook,
+    PriceDeque,
     LimitOrder,
     MatchedOrder,
     Direction
@@ -15,8 +15,13 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
     """A balanced tree implementation of a limit order book.
 
     This implementation of a limit order book relies on i) a balanced binary
-    tree to lookup a double ended queue for each bid and ask price level and
+    tree to look up a double ended queue for each bid and ask price level and
     ii) a dictionary to lookup limit orders from a given order identifier.
+
+    References
+    ----------
+    . https://en.wikipedia.org/wiki/AVL_tree
+    . https://web.archive.org/web/20110219163448/http://howtohft.wordpress.com/2011/02/15/how-to-build-a-fast-limit-order-book/
     """
 
     def __init__(self, name: AnyStr, max_price: int) -> None:
@@ -34,37 +39,30 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
 
         if limit_order.price not in book:
             # Create deque with limit order
-            book.insert(limit_order.price, deque([limit_order]))
+            book.insert(
+                limit_order.price,
+                PriceDeque(price=limit_order.price, iterable=[limit_order])
+            )
+
         else:
             # Append limit order to existing deque
             book.get_value(limit_order.price).append(limit_order)
 
-    def add(
-            self, trader_id: int, direction: Direction, quantity: int,
-            price: int
-    ) -> Optional[LimitOrder]:
+    def add(self, limit_order: LimitOrder) -> None:
         """Add an order to the limit order book
 
         Parameters
         ----------
-        trader_id: int
-            The identifier of the trader who sent the order
-        direction: Direction
-            The direction of the order
-        quantity: int
-            The quantity to buy or sell in the order
-        price: int
-            The price of the limit order
-
-        Returns
-        -------
-        LimitOrder
-            A limit order object with an identifier of the limit order.
+        limit_order: LimitOrder
+            The limit order to add to the book
         """
 
-        if direction == Direction.Buy:
+        if limit_order.direction == Direction.Buy:
             # Look for outstanding sell orders that cross with the buy order
-            while (price >= self.best_ask) and (not self._asks.is_empty()):
+            while (
+                (limit_order.price >= self.best_ask) and
+                (not self._asks.is_empty())
+            ):
 
                 # Iterate through limit orders at current ask min
                 entries = self._asks.get_value(self.best_ask)
@@ -72,41 +70,41 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
                 while entries:
                     entry = entries[0]
 
-                    if entry.quantity < quantity:
+                    if entry.quantity < limit_order.quantity:
                         # Current limit order is larger than best ask order
-                        quantity -= entry.quantity
+                        limit_order.quantity -= entry.quantity
 
                         # Remove existing order from book
                         entries.popleft()
 
                         self.execute(
                             MatchedOrder(
-                                buy_trader_id=trader_id,
+                                buy_trader_id=limit_order.trader_id,
                                 sell_trader_id=entry.trader_id,
                                 quantity=entry.quantity,
-                                price=price,
+                                price=entry.price,
                             )
                         )
 
                     else:
-                        self.execute(
-                            MatchedOrder(
-                                buy_trader_id=trader_id,
-                                sell_trader_id=entry.trader_id,
-                                quantity=quantity,
-                                price=price,
-                            )
-                        )
-
                         # Existing limit order is larger than current order
-                        if entry.quantity > quantity:
+                        if entry.quantity > limit_order.quantity:
                             # Amend existing order in order book
-                            entry.quantity -= quantity
+                            entry.quantity -= limit_order.quantity
                         else:
                             # Remove existing order from order book
                             entries.popleft()
 
-                        # Order completely matched, no limit order to return
+                        self.execute(
+                            MatchedOrder(
+                                buy_trader_id=limit_order.trader_id,
+                                sell_trader_id=entry.trader_id,
+                                quantity=limit_order.quantity,
+                                price=limit_order.price,
+                            )
+                        )
+
+                        # Order completely matched, done
                         return None
 
                 # Exhausted all orders at the current price level, delete empty
@@ -115,20 +113,17 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
 
             # If we get here, then there is some quantity we cannot fill,
             # so we enqueue the order in the limit order book
-            limit_order = LimitOrder(
-                trader_id=trader_id,
-                direction=direction,
-                quantity=quantity,
-                price=price,
-            )
-
             self._add_order_to_queue(limit_order)
 
-            return limit_order
+            # Done
+            return None
 
         else:
             # Sell order
-            while (price <= self.best_bid) and (not self._bids.is_empty()):
+            while (
+                (limit_order.price <= self.best_bid) and
+                (not self._bids.is_empty())
+            ):
 
                 # Look for existing sell orders to cross with the buy order
                 entries = self._bids.get_value(self.best_bid)
@@ -136,9 +131,9 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
                 while entries:
                     entry = entries[0]
 
-                    if entry.quantity < quantity:
+                    if entry.quantity < limit_order.quantity:
                         # Current limit order is larger than best bid order
-                        quantity -= entry.quantity
+                        limit_order.quantity -= entry.quantity
 
                         # Remove existing order from book
                         entries.popleft()
@@ -146,7 +141,7 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
                         self.execute(
                             MatchedOrder(
                                 buy_trader_id=entry.trader_id,
-                                sell_trader_id=trader_id,
+                                sell_trader_id=limit_order.trader_id,
                                 quantity=entry.quantity,
                                 price=entry.price,
                             )
@@ -154,10 +149,9 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
 
                     else:
                         # Existing limit order is larger than current order
-
-                        if entry.quantity > quantity:
+                        if entry.quantity > limit_order.quantity:
                             # Amend existing order in order book
-                            entry.quantity -= quantity
+                            entry.quantity -= limit_order.quantity
                         else:
                             # Remove existing order from order book
                             entries.popleft()
@@ -165,13 +159,13 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
                         self.execute(
                             MatchedOrder(
                                 buy_trader_id=entry.trader_id,
-                                sell_trader_id=trader_id,
-                                quantity=entry.quantity,
-                                price=entry.price,
+                                sell_trader_id=limit_order.trader_id,
+                                quantity=limit_order.quantity,
+                                price=limit_order.price,
                             )
                         )
 
-                        # Order completely matched, no limit order to return
+                        # Order completely matched, done
                         return None
 
                 # Exhausted all orders at the current price level, delete empty
@@ -180,16 +174,10 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
 
             # If we get here, then there is some quantity we cannot fill,
             # so we enqueue the order in the limit order book
-            limit_order = LimitOrder(
-                trader_id=trader_id,
-                direction=direction,
-                quantity=quantity,
-                price=price,
-            )
-
             self._add_order_to_queue(limit_order)
 
-            return limit_order
+            # Done
+            return None
 
     def cancel(self, order_id: AnyStr) -> None:
         """Cancel limit order with the given order identifier
@@ -254,21 +242,10 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
             A pandas DataFrame summary of bids at the top of the book.
         """
         current_level = self.best_bid
-
         data = []
 
-        while current_level > self.best_bid - levels:
-
-            data.append(
-                {
-                    "Price": current_level,
-                    "Quantity": sum([
-                        order.quantity
-                        for order in self._bids.get_value(current_level)
-                    ]),
-                    "NumOrders": len(self._bids.get_value(current_level)),
-                }
-            )
+        while len(data) < levels:
+            data.append(self._bids.get_value(current_level).as_dict())
 
             if current_level == self._bids.min_item()[0]:
                 # If reached the lowest level, break
@@ -294,21 +271,11 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
         """
 
         current_level = self.best_ask
-
         data = []
 
-        while current_level < self.best_ask + levels:
+        while len(data) < levels:
 
-            data.append(
-                {
-                    "Price": current_level,
-                    "Quantity": sum([
-                        order.quantity
-                        for order in self._asks.get_value(current_level)
-                    ]),
-                    "NumOrders": len(self._asks.get_value(current_level)),
-                }
-            )
+            data.append(self._asks.get_value(current_level).as_dict())
 
             if current_level == self._asks.max_item()[0]:
                 # If reached the highest level, break
