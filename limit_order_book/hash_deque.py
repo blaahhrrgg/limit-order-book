@@ -13,8 +13,8 @@ from .base import (
 class HashDequeLimitOrderBook(BaseLimitOrderBook):
     """A hash-map implementation of a limit order book.
 
-    This implementation of a limit order book relies on i) a hash map (
-    dictionary) of double-ended queue at each price and ii) a dictionary to
+    This implementation of a limit order book relies on i) a hash map
+    (dictionary) of double-ended queue at each price and ii) a dictionary to
     lookup limit orders from a given order identifier.
     """
 

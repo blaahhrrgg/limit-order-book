@@ -18,25 +18,6 @@ class ArrayDequeLimitOrderBook(BaseLimitOrderBook):
     orders from a given order identifier and is inspired by the Voyager
     submission to the QuantCup, see below references.
 
-    The attributes `bid_max` and `ask_min` maintain the starting point for any
-    search to match orders. The value of `bid_max` corresponds to the maximum
-    price in which there is a buy order. Analogously, the value of `ask_min`
-    corresponds to the minimum price at which there is a sell order.
-
-    When a buy order arrives, a search for any existing sell orders that
-    cross with the new order is conducted. The search is started from `ask_min`
-    and is incremented upwards until either (a) the buy order is fully
-    matched, or (b), a price point is reached that no longer crosses with the
-    incoming order. For case (b), a new limit order is added to the book. An
-    incoming sell order is handled analogously.
-
-    When a limit order is cancelled, the order is looked-up using the order
-    dictionary and then deleted from the deque of orders at the given price
-    level.
-
-    This is inspired by the Voyager submission to the QuantCup, see below
-    references for more details.
-
     References
     ----------
     . https://web.archive.org/web/20141222151051/https://dl.dropboxusercontent.com/u/3001534/engine.c

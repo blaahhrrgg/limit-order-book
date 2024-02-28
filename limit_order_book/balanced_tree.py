@@ -16,8 +16,13 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
     """A balanced tree implementation of a limit order book.
 
     This implementation of a limit order book relies on i) a balanced binary
-    tree to lookup a double ended queue for each bid and ask price level and
+    tree to look up a double ended queue for each bid and ask price level and
     ii) a dictionary to lookup limit orders from a given order identifier.
+
+    References
+    ----------
+    . https://en.wikipedia.org/wiki/AVL_tree
+    . https://web.archive.org/web/20110219163448/http://howtohft.wordpress.com/2011/02/15/how-to-build-a-fast-limit-order-book/
     """
 
     def __init__(self, name: AnyStr, max_price: int) -> None:
