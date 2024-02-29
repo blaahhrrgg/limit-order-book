@@ -59,10 +59,7 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
 
         if limit_order.direction == Direction.Buy:
             # Look for outstanding sell orders that cross with the buy order
-            while (
-                (limit_order.price >= self.best_ask) and
-                (not self._asks.is_empty())
-            ):
+            while limit_order.price >= self.best_ask:
 
                 # Iterate through limit orders at current ask min
                 entries = self._asks.get_value(self.best_ask)
@@ -120,10 +117,7 @@ class BalancedTreeDequeLimitOrderBook(BaseLimitOrderBook):
 
         else:
             # Sell order
-            while (
-                (limit_order.price <= self.best_bid) and
-                (not self._bids.is_empty())
-            ):
+            while limit_order.price <= self.best_bid:
 
                 # Look for existing sell orders to cross with the buy order
                 entries = self._bids.get_value(self.best_bid)
