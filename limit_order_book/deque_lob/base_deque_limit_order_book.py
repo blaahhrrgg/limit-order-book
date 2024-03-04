@@ -1,7 +1,7 @@
 import pandas
-from typing import AnyStr
+from typing import AnyStr, Optional
 
-from .base import (
+from limit_order_book.base import (
     BaseLimitOrderBook,
     PriceDeque,
     LimitOrder,
@@ -10,27 +10,57 @@ from .base import (
 )
 
 
-class HashDequeLimitOrderBook(BaseLimitOrderBook):
-    """A hash-map implementation of a limit order book.
+class BaseDequeLimitOrderBook(BaseLimitOrderBook):
+    """Base class for deque limit order book implementations.
 
-    This implementation of a limit order book relies on i) a hash map
-    (dictionary) of double-ended queue at each price and ii) a dictionary to
-    lookup limit orders from a given order identifier.
+    This flavour of implementation utilises a double-ended queue at each price
+    level to keep track of limit orders in chronological order. Another data
+    structure is used to enable efficient lookup of the double-ended queues.
+
+    See Also
+    --------
+    .. ArrayDequeLimitOrderBook
+    .. HashDequeLimitOrderBook
+    .. BalancedTreeDequeLimitOrderBook
     """
 
     def __init__(self, name: AnyStr, max_price: int) -> None:
         super().__init__(name, max_price)
-        self.bid_max = 0
-        self.ask_min = max_price + 1
         self.orders = dict()
-        self.price_queues = dict()
 
     def _add_order_to_queue(self, limit_order: LimitOrder) -> None:
-        self.orders[limit_order.id] = limit_order
-        # self.price_queues[limit_order.price].append(limit_order)
+        """Add order to queue"""
+        raise NotImplementedError
 
-        self.price_queues.setdefault(limit_order.price, PriceDeque(
-            price=limit_order.price)).append(limit_order)
+    def _get_price_level(self, price: int) -> PriceDeque:
+        """Returns PriceDeque for the given price."""
+        raise NotImplementedError
+
+    def _get_next_level(self, price: int) -> int:
+        """Returns the next price level."""
+        raise NotImplementedError
+
+    def _get_prev_level(self, price: int) -> int:
+        """Returns the previous price level."""
+        raise NotImplementedError
+
+    def _update_best_ask_price(self, price: Optional[int] = None) -> None:
+        """Update the best ask price."""
+        raise NotImplementedError
+
+    def _update_best_bid_price(self, price: Optional[int] = None) -> None:
+        """Update the best bid price."""
+        raise NotImplementedError
+
+    @property
+    def best_bid(self) -> int:
+        """Return the current best bid price."""
+        raise NotImplementedError
+
+    @property
+    def best_ask(self) -> int:
+        """Return the current best ask price."""
+        raise NotImplementedError
 
     def add(self, limit_order: LimitOrder) -> None:
         """Add an order to the limit order book
@@ -43,11 +73,11 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
 
         if limit_order.direction == Direction.Buy:
             # Look for outstanding sell orders that cross with the buy order
-            while limit_order.price >= self.ask_min:
-                # Iterate through limit orders at current ask min
-                entries = self.price_queues.get(
-                    self.ask_min, PriceDeque(price=self.ask_min)
-                )
+
+            while limit_order.price >= self.best_ask:
+
+                # Iterate through limit orders at current level
+                entries = self._get_price_level(self.best_ask)
 
                 while entries:
                     entry = entries[0]
@@ -82,7 +112,7 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
                                 buy_trader_id=limit_order.trader_id,
                                 sell_trader_id=entry.trader_id,
                                 quantity=limit_order.quantity,
-                                price=limit_order.price,
+                                price=entry.price,
                             )
                         )
 
@@ -91,27 +121,24 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
 
                 # Exhausted all orders at the current price level, move to
                 # the next price level
-                self.ask_min += 1
+                self._update_best_ask_price()
 
             # If we get here, then there is some quantity we cannot fill,
             # so we enqueue the order in the limit order book
             self._add_order_to_queue(limit_order)
 
             # Update bid max
-            if self.bid_max < limit_order.price:
-                self.bid_max = limit_order.price
+            self._update_best_bid_price(limit_order.price)
 
             # Done
             return None
 
         else:
             # Sell order
-            while limit_order.price <= self.bid_max:
+            while limit_order.price <= self.best_bid:
 
                 # Look for existing sell orders to cross with the buy order
-                entries = self.price_queues.get(
-                    self.bid_max, PriceDeque(price=self.bid_max)
-                )
+                entries = self._get_price_level(self.best_bid)
 
                 while entries:
                     entry = entries[0]
@@ -146,7 +173,7 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
                                 buy_trader_id=entry.trader_id,
                                 sell_trader_id=limit_order.trader_id,
                                 quantity=limit_order.quantity,
-                                price=limit_order.price,
+                                price=entry.price,
                             )
                         )
 
@@ -155,15 +182,14 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
 
                 # Exhausted all orders at the current price level, move
                 # to the next price level
-                self.bid_max -= 1
+                self._update_best_bid_price()
 
             # If we get here, then there is some quantity we cannot fill,
             # so we enqueue the order in the limit order book
             self._add_order_to_queue(limit_order)
 
             # Update ask min
-            if self.ask_min > limit_order.price:
-                self.ask_min = limit_order.price
+            self._update_best_ask_price(limit_order.price)
 
             # Done
             return None
@@ -177,36 +203,14 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
             Deletes the limit order with the order identifier from the book
         """
 
-        # Delete order
+        # Fetch order
         limit_order = self.orders[order_id]
 
         # Remove limit order from book
-        self.price_queues[limit_order.price].remove(limit_order)
+        self._get_price_level(limit_order.price).remove(limit_order)
 
         # Remove order from order cache
         del self.orders[order_id]
-
-    @property
-    def best_bid(self) -> int:
-        """The current best bid price
-
-        Returns
-        -------
-        int
-            The current best bid price
-        """
-        return self.bid_max
-
-    @property
-    def best_ask(self) -> int:
-        """The current best ask price
-
-        Returns
-        -------
-        int
-            The current best ask price
-        """
-        return self.ask_min
 
     def get_top_bids_as_dataframe(self, levels=10) -> pandas.DataFrame:
         """Get a DataFrame summary of top bids in the order book.
@@ -226,12 +230,14 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
 
         while len(data) < levels and current_level > 0:
 
-            # If non-empty, append
-            if current_level in self.price_queues.keys():
-                data.append(self.price_queues[current_level].as_dict())
+            level = self._get_price_level(current_level)
 
-            # Go to next level
-            current_level -= 1
+            # If non-empty, append
+            if len(level) != 0:
+                data.append(level.as_dict())
+
+            # Go to previous level
+            current_level = self._get_prev_level(current_level)
 
         return pandas.DataFrame(data)
 
@@ -253,10 +259,12 @@ class HashDequeLimitOrderBook(BaseLimitOrderBook):
 
         while len(data) < levels and current_level < self.max_price:
 
-            if current_level in self.price_queues.keys():
-                data.append(self.price_queues[current_level].as_dict())
+            level = self._get_price_level(current_level)
+
+            if len(level) != 0:
+                data.append(level.as_dict())
 
             # Go to next level
-            current_level += 1
+            current_level = self._get_next_level(current_level)
 
         return pandas.DataFrame(data)

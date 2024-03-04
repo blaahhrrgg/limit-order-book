@@ -79,7 +79,7 @@ class BaseLimitOrderBook(abc.ABC):
     def get_latest_matches(self, n=10) -> pandas.DataFrame:
         """Returns the latest matches of the order book as a DataFrame."""
         return pandas.DataFrame(
-            match.as_dict for match in self._matches[-n:]
+            match.as_dict for match in self._matches[-n:][::-1]
         )
 
     def __rich__(self):
