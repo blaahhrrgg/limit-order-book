@@ -117,7 +117,7 @@ class ArrayDequeLimitOrderBook(BaseDequeLimitOrderBook):
         if len(self._get_price_level(starting_price)) != 0:
             self.ask_min = starting_price
         else:
-            self.ask_min = self._get_prev_level(starting_price)
+            self.ask_min = self._get_next_level(starting_price)
 
     def _update_best_bid_price(self, price=None):
         """Update the best bid price
