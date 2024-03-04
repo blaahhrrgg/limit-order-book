@@ -67,7 +67,11 @@ class BalancedTreeDequeLimitOrderBook(BaseDequeLimitOrderBook):
             The PriceQueue for the given price level
         """
         book = self._bids if price <= self.best_bid else self._asks
-        return book.get_value(price)
+
+        if price not in book:
+            return PriceDeque(price=price)
+        else:
+            return book.get_value(price)
 
     def _get_next_level(self, price: int) -> int:
         """Returns the next highest price level
